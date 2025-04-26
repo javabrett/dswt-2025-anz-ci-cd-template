@@ -1,0 +1,22 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  terraform_apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+      - name: Select workspace
+        run: |
+          terraform workspace select main || terraform workspace new main
+      - name: Terraform Init
+        run: terraform init -backend-config="key=state/main/main.tfstate"
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -var="environment=main"
