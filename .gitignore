@@ -1,1 +1,11 @@
-.DS_Store
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Local IDE files
+*.swp
+*.swo
+.vscode/
+.idea/
