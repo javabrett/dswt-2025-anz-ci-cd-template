@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Which environment to destroy (e.g. main, PR-123)'
+        description: 'Which environment to destroy (e.g. main, pr-123)'
         required: true
         default: 'main'
 
@@ -17,7 +17,7 @@ jobs:
   terraform:
     if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'push' && 'main' || format('PR-{0}', github.event.pull_request.number) }}
+    environment: ${{ github.event_name == 'push' && 'main' || format('pr-{0}', github.event.pull_request.number) }}
     env:
       TF_VAR_confluent_cloud_api_key: ${{ secrets.CONFLUENT_CLOUD_API_KEY }}
       TF_VAR_confluent_cloud_api_secret: ${{ secrets.CONFLUENT_CLOUD_API_SECRET }}
@@ -43,7 +43,7 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             cp terraform/main.tfvars terraform/auto.tfvars
           else
-            echo "environment = \"PR-${{ github.event.pull_request.number }}\"" > terraform/auto.tfvars
+            echo "environment = \"pr-${{ github.event.pull_request.number }}\"" > terraform/auto.tfvars
           fi
 
       - name: Terraform Init
@@ -51,7 +51,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="key=${{ github.event_name == 'push' && 'main.tfstate' || format('pr-${0}.tfstate', github.event.pull_request.number) }}" \
+            -backend-config="key=${{ github.event_name == 'push' && 'main.tfstate' || format('pr-{0}.tfstate', github.event.pull_request.number) }}" \
             -backend-config="region=ap-southeast-2"
 
       - name: Terraform Plan

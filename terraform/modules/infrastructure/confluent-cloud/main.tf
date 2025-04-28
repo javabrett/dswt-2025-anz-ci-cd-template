@@ -9,6 +9,10 @@ terraform {
 
 resource "confluent_environment" "this" {
   display_name = "${var.environment}-environment"
+
+  stream_governance {
+    package = "ADVANCED"
+  }
 }
 
 resource "confluent_kafka_cluster" "this" {
