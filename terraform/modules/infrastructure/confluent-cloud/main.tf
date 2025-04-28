@@ -15,6 +15,16 @@ resource "confluent_environment" "this" {
   }
 }
 
+data "confluent_schema_registry_cluster" "this" {
+  environment {
+    id = confluent_environment.this.id
+  }
+
+  depends_on = [
+    confluent_kafka_cluster.this
+  ]
+}
+
 resource "confluent_kafka_cluster" "this" {
   display_name = "${var.environment}-cluster"
   cloud = "AWS"
@@ -37,6 +47,12 @@ resource "confluent_role_binding" "this" {
   crn_pattern = confluent_kafka_cluster.this.rbac_crn
 }
 
+resource "confluent_role_binding" "data-steward" {
+  principal   = "User:${confluent_service_account.this.id}"
+  role_name   = "DataSteward"
+  crn_pattern = confluent_environment.this.resource_name
+}
+
 resource "confluent_api_key" "this" {
   display_name = "${var.environment}-cloud-cluster-admin-api-key"
   description  = "${var.environment}-CloudClusterAdmin API Key"
@@ -56,15 +72,32 @@ resource "confluent_api_key" "this" {
     }
   }
 
-  # The goal is to ensure that confluent_role_binding.app-manager-kafka-cluster-admin is created before
-  # confluent_api_key.app-manager-kafka-api-key is used to create instances of
-  # confluent_kafka_topic, confluent_kafka_acl resources.
-
-  # 'depends_on' meta-argument is specified in confluent_api_key.app-manager-kafka-api-key to avoid having
-  # multiple copies of this definition in the configuration which would happen if we specify it in
-  # confluent_kafka_topic, confluent_kafka_acl resources instead.
   depends_on = [
     confluent_role_binding.this
+  ]
+}
+
+resource "confluent_api_key" "sr" {
+  display_name = "${var.environment}-schema-registry-api-key"
+  description  = "${var.environment}-Schema Registry API Key"
+  owner {
+    id          = confluent_service_account.this.id
+    api_version = confluent_service_account.this.api_version
+    kind        = confluent_service_account.this.kind
+  }
+
+  managed_resource {
+    id          = data.confluent_schema_registry_cluster.this.id
+    api_version = data.confluent_schema_registry_cluster.this.api_version
+    kind        = data.confluent_schema_registry_cluster.this.kind
+
+    environment {
+      id = confluent_environment.this.id
+    }
+  }
+
+  depends_on = [
+    confluent_role_binding.data-steward
   ]
 }
 
