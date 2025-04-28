@@ -6,9 +6,16 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Which environment to destroy (e.g. main, PR-123)'
+        required: true
+        default: 'main'
 
 jobs:
   terraform:
+    if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'push' && 'main' || format('PR-{0}', github.event.pull_request.number) }}
     env:
@@ -42,13 +49,57 @@ jobs:
       - name: Terraform Init
         working-directory: terraform
         run: |
-          terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" -backend-config="key=${{ github.event_name == 'push' && 'main.tfstate' || format('pr-${0}.tfstate', github.event.pull_request.number) }}" -backend-config="region=ap-southeast-2"
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ github.event_name == 'push' && 'main.tfstate' || format('pr-${0}.tfstate', github.event.pull_request.number) }}" \
+            -backend-config="region=ap-southeast-2"
 
       - name: Terraform Plan
         working-directory: terraform
         run: terraform plan -var-file=auto.tfvars
 
       - name: Terraform Apply
-        if: github.event_name == 'push'
+        if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
         working-directory: terraform
         run: terraform apply -auto-approve -var-file=auto.tfvars
+
+  destroy:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    env:
+      TF_VAR_confluent_cloud_api_key: ${{ secrets.CONFLUENT_CLOUD_API_KEY }}
+      TF_VAR_confluent_cloud_api_secret: ${{ secrets.CONFLUENT_CLOUD_API_SECRET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.11.4'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-southeast-2
+          role-to-assume:        ${{ secrets.AWS_IAM_ROLE }}
+
+      - name: Prepare variables file
+        run: |
+          printf 'environment = "%s"\n' "${{ github.event.inputs.environment }}" \
+            > terraform/auto.tfvars
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ format('{0}.tfstate', github.event.inputs.environment) }}" \
+            -backend-config="region=ap-southeast-2"
+
+      - name: Terraform Destroy
+        working-directory: terraform
+        run: terraform destroy -auto-approve -var-file=auto.tfvars
